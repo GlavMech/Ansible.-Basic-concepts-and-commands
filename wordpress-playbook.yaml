@@ -1,0 +1,94 @@
+---
+- name: Установка WordPress на Debian 12
+  hosts: all
+  become: true
+
+  vars:
+    db_name: wordpress
+    db_user: wp_user
+    db_password: wp_password
+    db_root_socket: /run/mysqld/mysqld.sock
+    wordpress_url: https://wordpress.org/latest.tar.gz
+    wordpress_dir: /var/www/html
+
+  tasks:
+
+  - name: Обновление apt-репозиториев
+    apt:
+      update_cache: yes
+      cache_valid_time: 3600
+
+  - name: Установка необходимых пакетов
+    apt:
+      name:
+        - apache2
+        - mariadb-server
+        - php
+        - php-mysql
+        - php-curl
+        - php-gd
+        - php-mbstring
+        - php-xml
+        - php-xmlrpc
+        - php-soap
+        - php-intl
+        - php-zip
+        - wget
+        - tar
+        - unzip
+        - python3-pymysql
+      state: present
+
+  - name: Убедиться, что MariaDB запущена и включена
+    service:
+      name: mariadb
+      state: started
+      enabled: yes
+
+  - name: Создание базы данных WordPress
+    community.mysql.mysql_db:
+      name: "{{ db_name }}"
+      state: present
+      login_unix_socket: "{{ db_root_socket }}"
+
+  - name: Создание пользователя WordPress
+    community.mysql.mysql_user:
+      name: "{{ db_user }}"
+      password: "{{ db_password }}"
+      priv: "{{ db_name }}.*:ALL"
+      state: present
+      login_unix_socket: "{{ db_root_socket }}"
+
+  - name: Скачивание WordPress
+    get_url:
+      url: "{{ wordpress_url }}"
+      dest: /tmp/wordpress.tar.gz
+
+  - name: Распаковка WordPress
+    unarchive:
+      src: /tmp/wordpress.tar.gz
+      dest: /tmp
+      remote_src: yes
+
+  - name: Удаление стандартного index.html
+    file:
+      path: "{{ wordpress_dir }}/index.html"
+      state: absent
+
+  - name: Копирование файлов WordPress в /var/www/html
+    copy:
+      src: /tmp/wordpress/
+      dest: "{{ wordpress_dir }}/"
+      owner: www-data
+      group: www-data
+      mode: '0755'
+      remote_src: yes
+
+  - name: Установка прав на директорию WordPress
+    file:
+      path: "{{ wordpress_dir }}"
+      state: directory
+      recurse: yes
+      owner: www-data
+      group: www-data
+
